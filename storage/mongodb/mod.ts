@@ -23,7 +23,7 @@ type VariableSchema = {
     createdAt: Date
 }
 
-export default class MongoDbStorage implements mawa.Storage {
+export class MongoDbStorage implements mawa.Storage {
     private database: Database | undefined
 
     constructor(private readonly url: string) {}

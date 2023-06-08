@@ -1,6 +1,6 @@
 import { mawa } from '../../deps.ts'
 
-export class WebChannel implements mawa.Channel {
+export class MawaChatChannel implements mawa.Channel {
     public readonly sourceId = 'web'
 
     private readonly activeConnections = new Map<string, mawa.UnknownMessage[]>()

@@ -1,3 +1,3 @@
-export * as mawaConfig from '../../mawa-sdk/src/config.ts'
-export * as mawaChannel from '../../mawa-sdk/src/channel/channel.ts'
-export * as mawaState from '../../mawa-sdk/src/state.ts'
+export * as mawaConfig from 'https://deno.land/x/mawa@0.0.22/src/config.ts'
+export * as mawaChannel from 'https://deno.land/x/mawa@0.0.22/src/channel/channel.ts'
+export * as mawaState from 'https://deno.land/x/mawa@0.0.22/src/state.ts'
