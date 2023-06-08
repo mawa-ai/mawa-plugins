@@ -1,14 +1,15 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'https://deno.land/x/lambda@1.29.1/mod.ts'
 import { mawaChannel, mawaConfig, mawaState } from '../deps.ts'
 import { mawa } from '../../deps.ts'
+import { config } from 'https://deno.land/x/mawa@0.0.22/mod.ts'
 
-export const getHandler = async (
-    directory: string,
-    requestTransformer: (request: Request) => Request = (request) => request,
-) => {
-    await mawaConfig.initializeConfiguration(directory, false)
+export const getHandler =
+    (directory: string, requestTransformer: (request: Request) => Request = (request) => request) =>
+    async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
+        if (!config()) {
+            await mawaConfig.initializeConfiguration(directory, false)
+        }
 
-    return async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
         mawa.logger.info('Received event', event)
 
         try {
@@ -45,4 +46,3 @@ export const getHandler = async (
             }
         }
     }
-}
