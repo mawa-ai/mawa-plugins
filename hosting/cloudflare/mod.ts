@@ -3,10 +3,6 @@ import { mawaChannel, mawaConfig, mawaState } from '../deps.ts'
 
 export const createFetchListener = async (directory: string) => {
     await mawaConfig.initializeConfiguration(directory, false)
-    const logLevel = mawa.config().logLevel
-    if (logLevel) {
-        mawa.setupLogger(logLevel)
-    }
 
     return (request: Request): Promise<Response> => {
         try {

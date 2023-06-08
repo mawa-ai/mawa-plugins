@@ -7,10 +7,6 @@ export const getHandler = async (
     requestTransformer: (request: Request) => Request = (request) => request,
 ) => {
     await mawaConfig.initializeConfiguration(directory, false)
-    const logLevel = mawa.config().logLevel
-    if (logLevel) {
-        mawa.setupLogger(logLevel)
-    }
 
     return async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
         mawa.logger.info('Received event', event)
