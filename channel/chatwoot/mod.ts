@@ -1,4 +1,8 @@
 import { mawa } from '../../deps.ts'
+import { Converter } from '../converter.ts'
+import { chatwootMenuConverter } from './converters/menu.ts'
+import { chatwootQuickReplyConverter } from './converters/quick-reply.ts'
+import { chatwootTextConverter } from './converters/text.ts'
 
 type ChatwootMessage = {
     account: {
@@ -27,12 +31,19 @@ type ChatwootMessage = {
     event: string
 }
 
-export default class ChatwootChannel implements mawa.Channel {
+const converters: Converter<keyof mawa.MessageTypes>[] = [
+    chatwootTextConverter,
+    chatwootMenuConverter,
+    chatwootQuickReplyConverter,
+]
+
+export class ChatwootChannel implements mawa.Channel {
     public readonly sourceId = 'chatwoot'
 
     constructor(
         private readonly config: {
-            userApiKey: string
+            agentBotApiKey: string
+            accountId: number
             baseUrl?: string
         },
     ) {
@@ -98,29 +109,38 @@ export default class ChatwootChannel implements mawa.Channel {
             throw new Error(`No conversation found for user ${userId}`)
         }
 
-        if (!mawa.isMessageOfType(message, 'text')) {
-            throw new Error(`Message type ${message.type} not supported`)
-        }
-
-        const result = await fetch(`${this.config.baseUrl}/api/v1/conversations/${conversation}/messages`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'api_access_token': this.config.userApiKey,
+        const chatwootMessage = this.convertToChatwootMessage(message) as Record<string, unknown>
+        const result = await fetch(
+            `${this.config.baseUrl}/api/v1/accounts/${this.config.accountId}/conversations/${conversation}/messages`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'api_access_token': this.config.agentBotApiKey,
+                },
+                body: JSON.stringify({
+                    message_type: 'outgoing',
+                    private: false,
+                    ...chatwootMessage,
+                }),
             },
-            body: JSON.stringify({
-                message_type: 'outgoing',
-                private: false,
-                content_type: 'text',
-                content: message.content,
-            }),
-        })
+        )
 
         if (!result.ok) {
             throw new Error(`Failed to send message: ${await result.text()}`)
         }
 
         mawa.logger.debug('Sent message to chatwoot', message)
+    }
+
+    private convertToChatwootMessage(message: mawa.UnknownMessage): unknown {
+        for (const converter of converters) {
+            if (converter.convertToSourceMessage && mawa.isMessageOfType(message, converter.type)) {
+                return converter.convertToSourceMessage(message.content)
+            }
+        }
+
+        throw new Error(`No converter found for message type ${message.type}`)
     }
 
     private convertObjectToStringObject(obj: Record<string, unknown>): Record<string, string> {
