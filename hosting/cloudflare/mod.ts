@@ -1,33 +1,50 @@
-import { config } from 'https://deno.land/x/mawa@0.0.22/mod.ts'
-import { mawa } from '../../deps.ts'
-import { mawaChannel, mawaConfig, mawaState } from '../deps.ts'
+import { createRequestHandler } from 'mawa/hosting'
 
-export const createFetchListener = (directory: string) => {
-    return async (request: Request): Promise<Response> => {
-        if (!config()) {
-            await mawaConfig.initializeConfiguration(directory, false)
-        }
+/**
+ * The part of Cloudflare's `ExecutionContext` this adapter uses.
+ *
+ * Declared structurally on purpose: depending on `@cloudflare/workers-types` would redeclare
+ * `Request`, `Response` and friends as globals, which conflicts with the types Deno already
+ * provides to everyone else consuming this package.
+ */
+export type ExecutionContext = {
+    waitUntil: (promise: Promise<unknown>) => void
+}
 
-        try {
-            return mawaChannel.resolveChannel(request, async (sourceAuthorId, message, channel) => {
-                mawa.logger.info('Received message from ' + sourceAuthorId + ' via ' + channel.sourceId, {
-                    sourceAuthorId: sourceAuthorId,
-                    message,
-                    channel: channel.sourceId,
-                })
+export type CloudflareOptions = {
+    /**
+     * Bot directory, used only when the bundle carries no registry.
+     *
+     * On Workers the bot is bundled ahead of time by `deno run -A jsr:@mawa/sdk/bundle`, which
+     * installs a registry, so this is normally left out.
+     */
+    directory?: string
+}
 
-                await mawaState.handleMessage(sourceAuthorId, message, channel, directory)
-            })
-        } catch (err) {
-            mawa.logger.error(err)
-            return Promise.resolve(
-                Response.json(
-                    {
-                        error: 'Error receiving message: ' + err.message,
-                    },
-                    { status: 500 },
-                ),
-            )
-        }
-    }
+export type FetchHandler = (request: Request, env?: unknown, ctx?: ExecutionContext) => Promise<Response>
+
+/**
+ * Builds a Worker `fetch` handler for a bot.
+ *
+ * ```ts
+ * export default { fetch: createFetchListener() }
+ * ```
+ *
+ * Bundle it with `deno run -A jsr:@mawa/sdk/bundle --bot ./bot --entry ./bot/worker.ts`, which
+ * resolves the bot's states ahead of time. Workers fixes its module graph when the bundle is
+ * built, so the SDK cannot discover `flow/*.ts` at request time the way it does under Deno.
+ *
+ * Secrets reach `mawa.config.ts` through a `Deno.env` shim over the Worker's bindings that the
+ * generated bundle installs, so a configuration written for Deno needs no changes.
+ *
+ * Webhook channels are acknowledged as soon as the message is accepted and their flow finishes
+ * in `ctx.waitUntil`, so providers that retry on a slow response get their prompt 200. Channels
+ * that build their reply into the response, such as the web chat, are still awaited.
+ */
+export const createFetchListener = (options: CloudflareOptions = {}): FetchHandler => {
+    const handle = createRequestHandler({ directory: options.directory })
+
+    return (request: Request, _env?: unknown, ctx?: ExecutionContext): Promise<Response> =>
+        // Not destructured: waitUntil is bound to the context.
+        handle(request, { defer: ctx && ((work) => ctx.waitUntil(work)) })
 }

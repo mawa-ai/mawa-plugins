@@ -118,12 +118,18 @@ export default class ChatwootPlugin implements mawa.Plugin {
         }
     }
 
-    public sendToChatWoot: mawa.State = async (context) => {
-        // set chatwoot state
-        return { input: false }
+    /**
+     * Placeholder for handing the conversation over to a Chatwoot agent.
+     *
+     * Currently a no-op that falls straight through to the next state: the handover state
+     * was never implemented. The `message` and `usermessage` hooks already mirror the
+     * conversation into Chatwoot regardless of this state.
+     */
+    public sendToChatWoot: mawa.State = (_context) => {
+        return Promise.resolve({ input: false })
     }
 
-    states = {
+    states: Record<string, mawa.State> = {
         send: this.sendToChatWoot,
     }
 

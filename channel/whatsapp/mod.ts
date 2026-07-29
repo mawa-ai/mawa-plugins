@@ -10,16 +10,26 @@ const converters: Converter<keyof mawa.MessageTypes>[] = [
     whatsappMenuConverter,
 ]
 
+/** Graph API version used when the channel is constructed without one. */
+export const DEFAULT_GRAPH_API_VERSION = 'v25.0'
+
+export type WhatsappChannelConfig = {
+    numberId: string
+    token: string
+    verifyToken: string
+    /**
+     * Graph API version to call, such as `'v25.0'`.
+     *
+     * Defaults to {@link DEFAULT_GRAPH_API_VERSION}. Meta retires versions after about two
+     * years, so pin this explicitly if you need to control when you move.
+     */
+    graphApiVersion?: string
+}
+
 export class WhatsappChannel implements mawa.Channel {
     public readonly sourceId = 'whatsapp'
 
-    constructor(
-        private readonly config: {
-            numberId: string
-            token: string
-            verifyToken: string
-        },
-    ) {}
+    constructor(private readonly config: WhatsappChannelConfig) {}
 
     public async receive(request: Request): Promise<mawa.SourceMessage | Response> {
         if (request.method === 'GET') {
@@ -78,7 +88,8 @@ export class WhatsappChannel implements mawa.Channel {
     }
 
     public async send(sourceUserId: string, message: mawa.UnknownMessage): Promise<void> {
-        const url = `https://graph.facebook.com/v15.0/${this.config.numberId}/messages`
+        const version = this.config.graphApiVersion ?? DEFAULT_GRAPH_API_VERSION
+        const url = `https://graph.facebook.com/${version}/${this.config.numberId}/messages`
         const headers = new Headers({
             'Authorization': `Bearer ${this.config.token}`,
             'Content-Type': 'application/json',

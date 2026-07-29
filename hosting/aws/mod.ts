@@ -1,48 +1,38 @@
-import { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'https://deno.land/x/lambda@1.29.1/mod.ts'
-import { mawaChannel, mawaConfig, mawaState } from '../deps.ts'
+import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda'
+import { createRequestHandler } from 'mawa/hosting'
 import { mawa } from '../../deps.ts'
-import { config } from 'https://deno.land/x/mawa@0.0.22/mod.ts'
 
-export const getHandler =
-    (directory: string, requestTransformer: (request: Request) => Request = (request) => request) =>
-    async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
-        if (!config()) {
-            await mawaConfig.initializeConfiguration(directory, false)
-        }
+/**
+ * Builds an AWS Lambda handler for a bot directory, for use behind an HTTP API (payload v2).
+ *
+ * @param directory The bot directory, containing `mawa.config.ts` and a `flow/` folder.
+ * @param requestTransformer Hook to rewrite the request before it is routed to a channel, for
+ * instance to strip a stage prefix off the channel path.
+ */
+export const getHandler = (
+    directory: string,
+    requestTransformer: (request: Request) => Request = (request) => request,
+): (event: APIGatewayProxyEventV2) => Promise<APIGatewayProxyResultV2> => {
+    const handle = createRequestHandler({ directory })
 
-        mawa.logger.info('Received event', event)
+    return async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
+        mawa.logger.debug('Received event', event)
 
-        try {
-            const request = new Request(
-                `https://${event.requestContext.domainName}${event.rawPath}?${event.rawQueryString}`,
-                {
-                    method: event.requestContext.http.method,
-                    headers: new Headers({ ...event.headers } as HeadersInit),
-                    body: event.body,
-                },
-            )
-            const response = await mawaChannel.resolveChannel(
-                requestTransformer(request),
-                async (sourceAuthorId, message, channel) => {
-                    mawa.logger.info('Received message from ' + sourceAuthorId + ' via ' + channel.sourceId, {
-                        sourceAuthorId: sourceAuthorId,
-                        message,
-                        channel: channel.sourceId,
-                    })
+        const request = new Request(
+            `https://${event.requestContext.domainName}${event.rawPath}?${event.rawQueryString}`,
+            {
+                method: event.requestContext.http.method,
+                headers: new Headers({ ...event.headers } as HeadersInit),
+                body: event.body,
+            },
+        )
 
-                    await mawaState.handleMessage(sourceAuthorId, message, channel, directory)
-                },
-            )
-            return {
-                statusCode: response.status,
-                headers: Object.fromEntries(response.headers.entries()),
-                body: response.body ? await response.text() : undefined,
-            }
-        } catch (err) {
-            mawa.logger.error(err)
-            return {
-                statusCode: 500,
-                body: JSON.stringify({ error: 'Error receiving message: ' + err.message }),
-            }
+        const response = await handle(requestTransformer(request))
+
+        return {
+            statusCode: response.status,
+            headers: Object.fromEntries(response.headers.entries()),
+            body: response.body ? await response.text() : undefined,
         }
     }
+}

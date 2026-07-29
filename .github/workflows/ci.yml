@@ -1,0 +1,54 @@
+name: CI
+
+on:
+    push:
+        branches: [main, master]
+    pull_request:
+    workflow_dispatch:
+
+jobs:
+    check:
+        runs-on: ubuntu-latest
+        steps:
+            # deno.json links "../mawa-sdk", so the SDK has to sit next to this repo on disk.
+            # Checking both out means CI tests against the SDK at HEAD rather than the last
+            # published release, so a breaking change in either repo fails here first.
+            - uses: actions/checkout@v4
+              with:
+                  path: mawa-plugins
+
+            - uses: actions/checkout@v4
+              with:
+                  repository: mawa-ai/mawa-sdk
+                  path: mawa-sdk
+
+            - uses: denoland/setup-deno@v2
+              with:
+                  deno-version: v2.x
+
+            - name: Check formatting
+              working-directory: mawa-plugins
+              run: deno fmt --check
+
+            - name: Lint
+              working-directory: mawa-plugins
+              run: deno lint
+
+            - name: Type check
+              working-directory: mawa-plugins
+              run: deno check .
+
+            # tests/mongodb.test.ts is skipped here: it needs a real server. To cover
+            # MongoDbStorage too, add the service below and set MONGODB_TEST_URL on this step.
+            #
+            #   services:
+            #     mongodb:
+            #       image: mongo:8
+            #       ports: ['27017:27017']
+            - name: Test
+              working-directory: mawa-plugins
+              run: deno test -A
+
+            - name: Verify the package can be published
+              working-directory: mawa-plugins
+              run: deno publish --dry-run

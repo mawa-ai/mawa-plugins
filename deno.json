@@ -1,0 +1,66 @@
+{
+    "name": "@mawa/plugins",
+    "version": "0.1.0",
+    "license": "MIT",
+    "exports": {
+        "./channel/whatsapp": "./channel/whatsapp/mod.ts",
+        "./channel/chatwoot": "./channel/chatwoot/mod.ts",
+        "./channel/mawa-chat": "./channel/mawa-chat/mod.ts",
+        "./plugin/chatwoot": "./plugins/chatwoot/mod.ts",
+        "./storage/mongodb": "./storage/mongodb/mod.ts",
+        "./hosting/aws": "./hosting/aws/mod.ts",
+        "./hosting/cloudflare": "./hosting/cloudflare/mod.ts"
+    },
+    "imports": {
+        "@std/assert": "jsr:@std/assert@^1.0.19",
+        "@std/path": "jsr:@std/path@^1.1.6",
+        "aws-lambda": "npm:@types/aws-lambda@^8.10.162",
+        "mawa": "jsr:@mawa/sdk@^0.1.0",
+        "mawa/hosting": "jsr:@mawa/sdk@^0.1.0/hosting",
+        "mawa/testing": "jsr:@mawa/sdk@^0.1.0/testing",
+        "mongodb": "npm:mongodb@^7.5.0",
+        "mawa/bundle": "jsr:@mawa/sdk@^0.1.0/bundle"
+    },
+    "links": [
+        "../mawa-sdk"
+    ],
+    "publish": {
+        "exclude": [
+            "tests/",
+            ".github/",
+            "coverage/",
+            "deno.lock",
+            "dist/"
+        ]
+    },
+    "tasks": {
+        "check": "deno check .",
+        "test": "deno test -A",
+        "test:watch": "deno test -A --watch",
+        "ci": "deno fmt --check && deno lint && deno task check && deno task test",
+        "e2e:cloudflare": "deno run -A tests/e2e/cloudflare.ts"
+    },
+    "fmt": {
+        "singleQuote": true,
+        "semiColons": false,
+        "lineWidth": 120,
+        "indentWidth": 4,
+        "useTabs": false,
+        "exclude": [
+            "coverage/"
+        ]
+    },
+    "lint": {
+        "rules": {
+            "tags": [
+                "recommended"
+            ]
+        },
+        "exclude": [
+            "coverage/"
+        ]
+    },
+    "exclude": [
+        "coverage/"
+    ]
+}
