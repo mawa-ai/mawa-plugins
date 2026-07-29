@@ -2,7 +2,12 @@
   "version": "5",
   "specifiers": {
     "jsr:@std/assert@^1.0.19": "1.0.19",
+    "jsr:@std/bytes@^1.0.6": "1.0.6",
     "jsr:@std/cli@^1.0.24": "1.0.32",
+    "jsr:@std/crypto@^1.1.0": "1.1.0",
+    "jsr:@std/dotenv@~0.225.7": "0.225.7",
+    "jsr:@std/encoding@^1.0.11": "1.0.11",
+    "jsr:@std/fmt@^1.0.10": "1.0.10",
     "jsr:@std/fmt@^1.0.5": "1.0.10",
     "jsr:@std/fs@^1.0.11": "1.0.24",
     "jsr:@std/internal@^1.0.12": "1.0.14",
@@ -10,6 +15,7 @@
     "jsr:@std/io@~0.225.2": "0.225.3",
     "jsr:@std/log@~0.224.14": "0.224.14",
     "jsr:@std/path@^1.1.6": "1.1.6",
+    "jsr:@std/streams@^1.1.1": "1.1.1",
     "npm:@types/aws-lambda@^8.10.162": "8.10.162",
     "npm:mongodb@^7.5.0": "7.5.0"
   },
@@ -20,8 +26,24 @@
         "jsr:@std/internal@^1.0.12"
       ]
     },
+    "@std/bytes@1.0.6": {
+      "integrity": "f6ac6adbd8ccd99314045f5703e23af0a68d7f7e58364b47d2c7f408aeb5820a"
+    },
     "@std/cli@1.0.32": {
-      "integrity": "188b3a100d6202d64e3f5bd3d799c7fa4f6d77f92cc65eb7f641c1fa0aa92a66"
+      "integrity": "188b3a100d6202d64e3f5bd3d799c7fa4f6d77f92cc65eb7f641c1fa0aa92a66",
+      "dependencies": [
+        "jsr:@std/fmt@^1.0.10",
+        "jsr:@std/internal@^1.0.14"
+      ]
+    },
+    "@std/crypto@1.1.0": {
+      "integrity": "b8d6d0a6377a32b213af2661ed7bf1062d94feac0c57def5526a8e74a95c3ec8"
+    },
+    "@std/dotenv@0.225.7": {
+      "integrity": "11d8db03ca4ad5aba9eba809f2e8058b2a4f320b7b09fea4b360e162928329e3"
+    },
+    "@std/encoding@1.0.11": {
+      "integrity": "e7cef2f0b3153bccc17431e7c864a1de03a4b6d9647389c43e08aaa775d37385"
     },
     "@std/fmt@1.0.10": {
       "integrity": "90dfba288802ac6de82fb31d0917eb9e4450b9925b954d5e51fc29ac07419db5"
@@ -38,7 +60,7 @@
     "@std/log@0.224.14": {
       "integrity": "257f7adceee3b53bb2bc86c7242e7d1bc59729e57d4981c4a7e5b876c808f05e",
       "dependencies": [
-        "jsr:@std/fmt",
+        "jsr:@std/fmt@^1.0.5",
         "jsr:@std/fs",
         "jsr:@std/io"
       ]
@@ -47,6 +69,12 @@
       "integrity": "c68485c2a4dfbb5ae3cc74fae4e8c4e5d874cf8a8ed12927917235c758b46cbe",
       "dependencies": [
         "jsr:@std/internal@^1.0.14"
+      ]
+    },
+    "@std/streams@1.1.1": {
+      "integrity": "92556d350e537e9dce527a6d08f6f15be3ff65e656079dea69d15252187c7613",
+      "dependencies": [
+        "jsr:@std/bytes"
       ]
     }
   },
@@ -120,6 +148,8 @@
     "dependencies": [
       "jsr:@mawa/sdk@0.1",
       "jsr:@std/assert@^1.0.19",
+      "jsr:@std/crypto@^1.1.0",
+      "jsr:@std/encoding@^1.0.11",
       "jsr:@std/path@^1.1.6",
       "npm:@types/aws-lambda@^8.10.162",
       "npm:mongodb@^7.5.0"

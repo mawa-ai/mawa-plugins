@@ -1,7 +1,11 @@
 import { mawa } from '../../deps.ts'
-import { Converter } from '../converter.ts'
+import { mergeContact } from '../contact.ts'
+import { Converter, convertToSourcePayloads } from '../converter.ts'
+import { chatwootLocationConverter } from './converters/location.ts'
+import { chatwootMediaConverter } from './converters/media.ts'
 import { chatwootMenuConverter } from './converters/menu.ts'
 import { chatwootQuickReplyConverter } from './converters/quick-reply.ts'
+import { chatwootTemplateConverter } from './converters/template.ts'
 import { chatwootTextConverter } from './converters/text.ts'
 
 type ChatwootMessage = {
@@ -31,10 +35,21 @@ type ChatwootMessage = {
     event: string
 }
 
+/**
+ * User metadata key holding the Chatwoot contact name, as last seen.
+ *
+ * The contact record is edited by agents and by the upstream channel, so the channel keeps its
+ * own copy here and only claims `User.name` while nothing else has. See {@linkcode mergeContact}.
+ */
+export const CHATWOOT_CONTACT_NAME_KEY = 'chatwootContactName'
+
 const converters: Converter<keyof mawa.MessageTypes>[] = [
     chatwootTextConverter,
     chatwootMenuConverter,
     chatwootQuickReplyConverter,
+    chatwootMediaConverter,
+    chatwootLocationConverter,
+    chatwootTemplateConverter,
 ]
 
 export class ChatwootChannel implements mawa.Channel {
@@ -82,18 +97,24 @@ export class ChatwootChannel implements mawa.Channel {
         }
 
         const userId = mawa.User.getIdFromSourceId(body.sender.id.toString(), this.sourceId)
-        await mawa.config().storage.mergeUser(userId, {
-            name: body.sender.name,
-            email: body.sender.email,
-            phoneNumber: body.sender.phone_number,
-            photoUri: body.sender.avatar || body.sender.thumbnail,
-            metadata: this.convertObjectToStringObject({
-                ...body.sender.additional_attributes,
-                ...body.sender.custom_attributes,
-            }),
-        })
 
-        await mawa.config().storage.setKv(userId, '#chatwoot-conversation', body.conversation.id.toString())
+        // Independent of each other, so they do not need to be two round trips in sequence.
+        await Promise.all([
+            mergeContact(
+                userId,
+                { name: body.sender.name, key: CHATWOOT_CONTACT_NAME_KEY },
+                {
+                    email: body.sender.email,
+                    phoneNumber: body.sender.phone_number,
+                    photoUri: body.sender.avatar || body.sender.thumbnail,
+                    metadata: this.convertObjectToStringObject({
+                        ...body.sender.additional_attributes,
+                        ...body.sender.custom_attributes,
+                    }),
+                },
+            ),
+            mawa.config().storage.setKv(userId, '#chatwoot-conversation', body.conversation.id.toString()),
+        ])
 
         return {
             sourceAuthorId: body.sender.id.toString(),
@@ -102,6 +123,11 @@ export class ChatwootChannel implements mawa.Channel {
     }
 
     public async send(sourceUserId: string, message: mawa.UnknownMessage): Promise<void> {
+        const chatwootMessages = convertToSourcePayloads(converters, this.sourceId, message, undefined)
+        if (chatwootMessages.length === 0) {
+            return
+        }
+
         const userId = mawa.User.getIdFromSourceId(sourceUserId, this.sourceId)
         const conversation = await mawa.config().storage.getKv(userId, '#chatwoot-conversation')
 
@@ -109,38 +135,29 @@ export class ChatwootChannel implements mawa.Channel {
             throw new Error(`No conversation found for user ${userId}`)
         }
 
-        const chatwootMessage = this.convertToChatwootMessage(message) as Record<string, unknown>
-        const result = await fetch(
-            `${this.config.baseUrl}/api/v1/accounts/${this.config.accountId}/conversations/${conversation}/messages`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'api_access_token': this.config.agentBotApiKey,
+        for (const chatwootMessage of chatwootMessages) {
+            const result = await fetch(
+                `${this.config.baseUrl}/api/v1/accounts/${this.config.accountId}/conversations/${conversation}/messages`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'api_access_token': this.config.agentBotApiKey,
+                    },
+                    body: JSON.stringify({
+                        message_type: 'outgoing',
+                        private: false,
+                        ...chatwootMessage as Record<string, unknown>,
+                    }),
                 },
-                body: JSON.stringify({
-                    message_type: 'outgoing',
-                    private: false,
-                    ...chatwootMessage,
-                }),
-            },
-        )
+            )
 
-        if (!result.ok) {
-            throw new Error(`Failed to send message: ${await result.text()}`)
-        }
-
-        mawa.logger.debug('Sent message to chatwoot', message)
-    }
-
-    private convertToChatwootMessage(message: mawa.UnknownMessage): unknown {
-        for (const converter of converters) {
-            if (converter.convertToSourceMessage && mawa.isMessageOfType(message, converter.type)) {
-                return converter.convertToSourceMessage(message.content)
+            if (!result.ok) {
+                throw new Error(`Failed to send message: ${await result.text()}`)
             }
         }
 
-        throw new Error(`No converter found for message type ${message.type}`)
+        mawa.logger.debug('Sent message to chatwoot', message)
     }
 
     private convertObjectToStringObject(obj: Record<string, unknown>): Record<string, string> {

@@ -62,7 +62,7 @@ export class MawaChatChannel implements mawa.Channel {
                 return new Response('Invalid message', { status: 400, headers: this.getCorsHeaders(request) })
             }
 
-            await onMessage(sourceId, message, this)
+            await onMessage({ sourceAuthorId: sourceId, message }, this)
             return Response.json(this.activeConnections.get(sourceId), { headers: this.getCorsHeaders(request) })
         } finally {
             this.activeConnections.delete(sourceId)

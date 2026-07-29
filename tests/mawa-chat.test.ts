@@ -160,7 +160,7 @@ Deno.test('returns the replies produced while handling the message', async () =>
 
     const response = await channel.handle(
         messageRequest(credentials, { type: 'text', content: 'oi' }),
-        async (sourceAuthorId, _message, ch) => {
+        async ({ sourceAuthorId }, ch) => {
             assertEquals(sourceAuthorId, user)
             await ch.send(sourceAuthorId, { type: 'text', content: 'primeira' })
             await ch.send(sourceAuthorId, { type: 'text', content: 'segunda' })

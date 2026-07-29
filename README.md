@@ -27,6 +27,8 @@ export default {
             numberId: Deno.env.get('WA_NUMBER_ID')!,
             token: Deno.env.get('WA_TOKEN')!,
             verifyToken: Deno.env.get('WA_VERIFY_TOKEN')!,
+            // Required: every delivery's X-Hub-Signature-256 is verified against it.
+            appSecret: Deno.env.get('WA_APP_SECRET')!,
             // Defaults to the current Graph API version; pin it to control when you move.
             graphApiVersion: 'v25.0',
         }),
@@ -34,6 +36,109 @@ export default {
     storage: new MongoDbStorage(Deno.env.get('MONGODB_URL')!),
 } satisfies Configuration
 ```
+
+## WhatsApp
+
+### `appSecret` is required
+
+Every delivery's `X-Hub-Signature-256` is verified, and there is no way to turn that off. A webhook that cannot verify a
+delivery has no idea who sent it: the author of an inbound message comes from the payload, so anyone who knows the URL
+could drive any user's conversation. The secret is under App settings → Basic in the Meta dashboard.
+
+### What travels each way
+
+| Message       | Out                                                      | In                                              |
+| ------------- | -------------------------------------------------------- | ----------------------------------------------- |
+| `text`        | yes, with link previews; split when over 4096 characters | yes                                             |
+| `quick-reply` | up to 3 reply buttons, with optional header and footer   | replies come back as `text`                     |
+| `menu`        | a list, up to 10 rows over 10 sections                   | replies come back as `text`                     |
+| `media`       | by public `url` or by `id` from `uploadMedia`            | as an `id`; read the bytes with `downloadMedia` |
+| `location`    | yes                                                      | yes                                             |
+| `template`    | yes                                                      | —                                               |
+| `raw`         | passed through, for anything below                       | —                                               |
+
+A reply is matched on the option id the channel sent, not on the title WhatsApp echoes, so a flow sees the option text
+it wrote rather than the version cut to 20 characters for display.
+
+Interactive features with no message type of their own — CTA URL buttons, Flows, product messages, address messages —
+are reachable through `raw`, addressed to `'whatsapp'`:
+
+```ts
+await context.send({
+    type: 'raw',
+    content: { sourceId: 'whatsapp', payload: { type: 'interactive', interactive: {/* ... */} } },
+})
+```
+
+### Reaching a user first
+
+WhatsApp refuses free-form messages more than 24 hours after the user's last one. Past that only an approved template
+gets through, and a send that hits the limit says so:
+
+```ts
+await context.send({
+    type: 'template',
+    content: {
+        name: 'order_update',
+        language: 'pt_BR',
+        parameters: [orderId, days],
+        // Sent by channels that have no approved templates, so the same flow works on all of them.
+        fallback: `Seu pedido ${orderId} chega em ${days} dias.`,
+    },
+})
+```
+
+### Who the user is
+
+**The phone number is not the identity.** WhatsApp usernames let a user hide their number from a business, and when they
+do, `wa_id` and `from` are simply absent from the webhook — the fields most integrations were built to require. What is
+always sent is `user_id` / `from_user_id`, Meta's business-scoped user ID (BSUID), which is stable and scoped to your
+business portfolio.
+
+So a conversation is keyed on the BSUID where there is one, and on the phone number otherwise. Three things follow:
+
+- `author.id` may be `whatsapp:BR.13491208655302741918` rather than `whatsapp:5511999999999`. Do not parse a phone
+  number out of it.
+- `author.phoneNumber` is **optional**. It is set only when the user actually shared a number. A flow that needs one has
+  to ask, or request it, rather than assume.
+- `author.metadata.whatsappUsername` holds the `@handle` when the user has one, which is often all an agent has to go
+  on.
+
+**Nothing to migrate.** A user whose conversation started under their phone number keeps it: the first time their BSUID
+appears, the channel finds the existing phone-keyed user and links the two, so the flow carries on mid-conversation. New
+users are keyed on the BSUID from the start. Outbound sends address a BSUID as `recipient` and a phone number as `to`,
+which is read off the id's shape, so nothing has to be remembered per user.
+
+Sources:
+[Business-scoped user IDs](https://developers.facebook.com/documentation/business-messaging/whatsapp/business-scoped-user-ids/).
+
+### Who owns the user's name
+
+A WhatsApp profile name is whatever the user last typed into their own settings, and it arrives with every message.
+Writing it to `User.name` each time would undo the most ordinary thing a flow does — ask what to call someone and store
+the answer — one message later.
+
+So the channel claims `name` when the user is first seen, and keeps it in step with the profile only while nothing else
+has touched it. Once a flow, a hook or an agent sets `name`, it stays theirs. The profile name is always available in
+`author.metadata.whatsappProfileName`. Chatwoot behaves the same way, under `chatwootContactName`.
+
+### What is not a message
+
+Reactions, orders, contact cards, Flow completions and anything Meta adds next arrive as `event` messages rather than
+being dropped, so the `event` hook can answer instead of the bot going quiet. Event names are in `WHATSAPP_EVENTS`.
+Delivery statuses are logged, and reported as events too when `statusEvents` is set.
+
+Inbound messages are marked read with a typing indicator before the flow runs, in one request. `acknowledge: 'read'`
+drops the indicator, `'none'` skips the request entirely.
+
+### Redeliveries
+
+Meta retries a delivery that is slow or answered with anything but a 200. The channel reports each message's `wamid` as
+the `SourceMessage.id`, and the SDK skips one it has already handled — under the same per-user lock that serializes
+handling, so two retries arriving together cannot both slip through.
+
+Prefer a storage that implements `lock` when running more than one instance: `MongoDbStorage` does, and without it two
+instances handling the same user at once can lose a state transition.
 
 ## Cloudflare Workers
 
@@ -110,7 +215,8 @@ deno task check   # type check
 deno task ci      # fmt --check + lint + check + test
 ```
 
-`tests/mongodb.test.ts` needs a real server and is skipped unless `MONGODB_TEST_URL` is set:
+`tests/mongodb.test.ts` needs a real server and is skipped unless `MONGODB_TEST_URL` is set. The per-user lock is only
+covered there, so run these after touching it:
 
 ```sh
 docker run --rm -d -p 27017:27017 --name mawa-mongo mongo:8

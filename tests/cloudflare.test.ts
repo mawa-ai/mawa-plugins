@@ -19,7 +19,7 @@ class JsonChannel implements mawa.Channel {
 
     public async handle(request: Request, onMessage: mawa.MessageHandler): Promise<Response> {
         const { from, message } = await request.json()
-        await onMessage(from, message, this)
+        await onMessage({ sourceAuthorId: from, message }, this)
         return Response.json(this.sent)
     }
 
